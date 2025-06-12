@@ -1,4 +1,5 @@
-from flask import Flask, jsonify
+# M4A Upload Flask App for Cloud Run
+from flask import Flask, request, jsonify
 import os
 
 app = Flask(__name__)
@@ -6,19 +7,34 @@ app = Flask(__name__)
 @app.route('/')
 def hello():
     return jsonify({
-        'message': 'Hello from Cloud Run!',
-        'status': 'success'
+        'message': 'M4A Upload Service',
+        'status': 'running',
+        'endpoints': ['/upload', '/health']
     })
 
 @app.route('/health')
 def health_check():
     return jsonify({'status': 'healthy'}), 200
 
-@app.route('/api/data')
-def get_data():
+@app.route('/upload', methods=['POST'])
+def upload_m4a():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Basic validation for m4a files
+    if not file.filename.lower().endswith('.m4a'):
+        return jsonify({'error': 'Only M4A files allowed'}), 400
+    
+    # Here you would process the M4A file
+    # For now, just return success
     return jsonify({
-        'data': [1, 2, 3, 4, 5],
-        'timestamp': '2025-06-12'
+        'message': 'File uploaded successfully',
+        'filename': file.filename,
+        'size': len(file.read())
     })
 
 if __name__ == '__main__':
