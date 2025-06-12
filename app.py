@@ -17,7 +17,7 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-BUCKET_NAME = "recording_app_testing" 
+BUCKET_NAME = "terry_app_bucket" 
 storage_client = storage.Client()
 
 
