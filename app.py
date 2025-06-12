@@ -1,5 +1,6 @@
 # Audio Upload Flask App for Google Cloud Run
 from flask import Flask, request, render_template_string, jsonify
+from google.cloud import storage
 import os
 import threading
 from datetime import datetime
@@ -16,11 +17,15 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+BUCKET_NAME = "recording_app_testing" 
+storage_client = storage.Client()
+
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Simple HTML template (embedded to avoid template file issues)
+#PAGE TEMPLATE
 UPLOAD_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -178,7 +183,7 @@ UPLOAD_TEMPLATE = '''
 </head>
 <body>
     <div class="container">
-        <h1>ALPINE TESTING</h1>
+        <h1>TERRY APP TESTING</h1>
         
         <form id="uploadForm" enctype="multipart/form-data">
             <div class="upload-area" onclick="document.getElementById('fileInput').click()">
@@ -375,30 +380,33 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'m4a', 'mp3', 'wav', 'aac'}
 
 def process_audio_file(filepath):
-    """Process the uploaded audio file"""
+    """Process and upload audio file to Cloud Storage"""
     try:
         logger.info(f"Starting processing: {filepath}")
         
-        # Your audio processing logic goes here
-        # Examples:
-        # - Audio transcription
-        # - Format conversion
-        # - Audio analysis
-        # - Upload to cloud storage
+        # Extract filename
+        filename = os.path.basename(filepath)
         
-        # Simulate processing time
-        import time
-        time.sleep(2)
+        # Upload to Cloud Storage
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(f"audio-uploads/{filename}")
         
-        logger.info(f"Processing completed: {filepath}")
+        # Upload the file
+        with open(filepath, 'rb') as file_data:
+            blob.upload_from_file(file_data)
         
-        # Clean up temporary file after processing
+        logger.info(f"File uploaded to Cloud Storage: gs://{BUCKET_NAME}/audio-uploads/{filename}")
+        
+        # Your additional processing logic here
+        # Example: transcription, analysis, etc.
+        
+        # Clean up local temp file
         if os.path.exists(filepath):
             os.remove(filepath)
-            logger.info(f"Cleaned up file: {filepath}")
+            logger.info(f"Local temp file cleaned up: {filepath}")
             
     except Exception as e:
-        logger.error(f"Processing error: {str(e)}")
+        logger.error(f"Processing/Upload error: {str(e)}")
         # Clean up on error
         if os.path.exists(filepath):
             os.remove(filepath)
