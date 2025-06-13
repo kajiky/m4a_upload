@@ -42,7 +42,7 @@ UPLOAD_TEMPLATE = '''
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: url('background_alpine.jpg') no-repeat center center fixed;
+            background: url('/static/background_alpine.jpg') no-repeat center center fixed;
             background-size: cover;
             min-height: 100vh;
             display: flex;
@@ -52,7 +52,7 @@ UPLOAD_TEMPLATE = '''
 }
         
         .container {
-            background: red;
+            background: white;
             border-radius: 20px;
             padding: 40px 30px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
