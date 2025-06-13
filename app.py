@@ -42,13 +42,14 @@ UPLOAD_TEMPLATE = '''
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: url('background_alpine.jpg') no-repeat center center fixed;
+            background-size: cover;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
-        }
+}
         
         .container {
             background: white;
@@ -189,7 +190,7 @@ UPLOAD_TEMPLATE = '''
             <div class="upload-area" onclick="document.getElementById('fileInput').click()">
                 <div class="upload-icon">📱</div>
                 <div class="upload-text">Tap to select audio file</div>
-                <div style="font-size: 14px; color: #999;">Supports: M4A, MP3, WAV, AAC</div>
+                <div style="font-size: 14px; color: #999;">Supports: M4A/MP3</div>
             </div>
             
             <input type="file" id="fileInput" name="audio_file" accept=".m4a,.mp3,.wav,.aac,audio/*">
