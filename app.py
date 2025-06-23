@@ -5,16 +5,15 @@ import os
 import threading
 from datetime import datetime
 import uuid
-import tempfile
 import logging
 
 app = Flask(__name__)
 
-# FIXED: Configuration for 1000MB max file size
-app.config['MAX_CONTENT_LENGTH'] = 1000 * 1024 * 1024  # Your comment said 500MB but config was 1GB
+# Configuration for 1000MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 1000 * 1024 * 1024  
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-# Use /tmp for temporary file storage
+# Use /tmp for temporary file storage (Cloud Run requirement)
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -29,18 +28,25 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'m4a', 'mp3', 'wav', 'aac'}
 
-def process_audio_file(filepath):
+def process_audio_file(filepath, original_filename):
     """Process and upload audio file to Cloud Storage with resumable upload"""
     try:
         logger.info(f"Starting processing: {filepath}")
         
-        filename = os.path.basename(filepath)
         file_size = os.path.getsize(filepath)
         logger.info(f"File size: {file_size / (1024*1024):.2f} MB")
         
-        # FIXED: Use resumable upload for large files
+        # FIXED: Use original filename to preserve extension
         bucket = storage_client.bucket(BUCKET_NAME)
-        blob = bucket.blob(f"audio-uploads/{filename}")
+        blob_name = f"audio-uploads/{original_filename}"
+        blob = bucket.blob(blob_name)
+        
+        # Check if file already exists to prevent duplicates
+        if blob.exists():
+            logger.warning(f"File already exists, skipping: {blob_name}")
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return
         
         # Enable resumable upload for files > 8MB
         if file_size > 8 * 1024 * 1024:
@@ -50,7 +56,7 @@ def process_audio_file(filepath):
             with open(filepath, 'rb') as file_data:
                 blob.upload_from_file(file_data)
         
-        logger.info(f"File uploaded to Cloud Storage: gs://{BUCKET_NAME}/audio-uploads/{filename}")
+        logger.info(f"File uploaded to Cloud Storage: gs://{BUCKET_NAME}/{blob_name}")
         
         # Clean up local temp file
         if os.path.exists(filepath):
@@ -74,10 +80,10 @@ def handle_upload():
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
         
-        # FIXED: Check file size before processing
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        file.seek(0)  # Reset file pointer
+        # Check file size before processing
+        file.seek(0, os.SEEK_END)  # Move to end of file
+        file_size = file.tell()    # Get current position (file size)
+        file.seek(0)              # Reset file pointer to beginning
         
         logger.info(f"Received file: {file.filename}, Size: {file_size / (1024*1024):.2f} MB")
         
@@ -85,31 +91,33 @@ def handle_upload():
             return jsonify({'error': f'File too large. Max size: {app.config["MAX_CONTENT_LENGTH"] / (1024*1024):.0f}MB'}), 413
         
         if file and allowed_file(file.filename):
-            # Generate unique filename
+            # FIXED: Generate unique filename while preserving original extension
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             unique_id = str(uuid.uuid4())[:8]
-            filename = f"{timestamp}_{unique_id}_{file.filename}"
+            file_extension = file.filename.rsplit('.', 1)[1].lower()  # Extract original extension
+            base_name = file.filename.rsplit('.', 1)[0]              # Extract base name
+            unique_filename = f"{timestamp}_{unique_id}_{base_name}.{file_extension}"
             
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            filepath = os.path.join(UPLOAD_FOLDER, unique_filename)
             
-            # FIXED: Save with chunked writing for large files
-            logger.info(f"Saving large file in chunks: {filename}")
+            # Save with chunked writing for large files
+            logger.info(f"Saving large file in chunks: {unique_filename}")
             with open(filepath, 'wb') as f:
                 while True:
-                    chunk = file.read(8192)  # 8KB chunks
+                    chunk = file.read(8192)  # Read 8KB chunks to handle large files
                     if not chunk:
                         break
                     f.write(chunk)
             
-            logger.info(f"File saved: {filename}")
+            logger.info(f"File saved: {unique_filename}")
             
-            # Process file in background thread
-            threading.Thread(target=process_audio_file, args=(filepath,), daemon=True).start()
+            # FIXED: Pass the unique filename to maintain consistency
+            threading.Thread(target=process_audio_file, args=(filepath, unique_filename), daemon=True).start()
             
             return jsonify({
                 'success': True, 
                 'message': 'Large file uploaded successfully! Processing started.',
-                'filename': filename,
+                'filename': unique_filename,
                 'size_mb': f"{file_size / (1024*1024):.2f}"
             })
         
@@ -129,7 +137,7 @@ def upload_page():
     return render_template_string(UPLOAD_TEMPLATE)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8080))  # Use PORT env var for Cloud Run
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
 
 
