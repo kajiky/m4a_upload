@@ -11,7 +11,7 @@ import logging
 app = Flask(__name__)
 
 # Cloud Run configuration
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 500MB max file size
 
 # Use /tmp for temporary file storage (Cloud Run writable directory)
 UPLOAD_FOLDER = '/tmp/uploads'
