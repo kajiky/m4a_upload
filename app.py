@@ -1,4 +1,4 @@
-# Audio Upload Flask App for Google Cloud Run
+# Audio Upload Flask App for Google Cloud Run - Fixed for Large Files
 from flask import Flask, request, render_template_string, jsonify
 from google.cloud import storage
 import os
@@ -10,22 +10,129 @@ import logging
 
 app = Flask(__name__)
 
-# Cloud Run configuration
-app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 500MB max file size
+# FIXED: Configuration for 1000MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 1000 * 1024 * 1024  # Your comment said 500MB but config was 1GB
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-# Use /tmp for temporary file storage (Cloud Run writable directory)
+# Use /tmp for temporary file storage
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-BUCKET_NAME = "terry_app_bucket" 
+BUCKET_NAME = "terry_app_bucket"
 storage_client = storage.Client()
-
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-#PAGE TEMPLATE
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'m4a', 'mp3', 'wav', 'aac'}
+
+def process_audio_file(filepath):
+    """Process and upload audio file to Cloud Storage with resumable upload"""
+    try:
+        logger.info(f"Starting processing: {filepath}")
+        
+        filename = os.path.basename(filepath)
+        file_size = os.path.getsize(filepath)
+        logger.info(f"File size: {file_size / (1024*1024):.2f} MB")
+        
+        # FIXED: Use resumable upload for large files
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(f"audio-uploads/{filename}")
+        
+        # Enable resumable upload for files > 8MB
+        if file_size > 8 * 1024 * 1024:
+            logger.info("Using resumable upload for large file")
+            blob.upload_from_filename(filepath, timeout=3600)  # 1 hour timeout
+        else:
+            with open(filepath, 'rb') as file_data:
+                blob.upload_from_file(file_data)
+        
+        logger.info(f"File uploaded to Cloud Storage: gs://{BUCKET_NAME}/audio-uploads/{filename}")
+        
+        # Clean up local temp file
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            logger.info(f"Local temp file cleaned up: {filepath}")
+            
+    except Exception as e:
+        logger.error(f"Processing/Upload error: {str(e)}")
+        # Clean up on error
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+@app.route('/upload', methods=['POST'])
+def handle_upload():
+    """Handle file upload with better error handling for large files"""
+    try:
+        if 'audio_file' not in request.files:
+            return jsonify({'error': 'No file selected'}), 400
+        
+        file = request.files['audio_file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # FIXED: Check file size before processing
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)  # Reset file pointer
+        
+        logger.info(f"Received file: {file.filename}, Size: {file_size / (1024*1024):.2f} MB")
+        
+        if file_size > app.config['MAX_CONTENT_LENGTH']:
+            return jsonify({'error': f'File too large. Max size: {app.config["MAX_CONTENT_LENGTH"] / (1024*1024):.0f}MB'}), 413
+        
+        if file and allowed_file(file.filename):
+            # Generate unique filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            unique_id = str(uuid.uuid4())[:8]
+            filename = f"{timestamp}_{unique_id}_{file.filename}"
+            
+            filepath = os.path.join(UPLOAD_FOLDER, filename)
+            
+            # FIXED: Save with chunked writing for large files
+            logger.info(f"Saving large file in chunks: {filename}")
+            with open(filepath, 'wb') as f:
+                while True:
+                    chunk = file.read(8192)  # 8KB chunks
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            
+            logger.info(f"File saved: {filename}")
+            
+            # Process file in background thread
+            threading.Thread(target=process_audio_file, args=(filepath,), daemon=True).start()
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Large file uploaded successfully! Processing started.',
+                'filename': filename,
+                'size_mb': f"{file_size / (1024*1024):.2f}"
+            })
+        
+        return jsonify({'error': 'Invalid file type. Please upload M4A, MP3, WAV, or AAC files.'}), 400
+    
+    except Exception as e:
+        logger.error(f"Upload error: {str(e)}")
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy'}), 200
+
+@app.route('/')
+def upload_page():
+    return render_template_string(UPLOAD_TEMPLATE)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+
+
 UPLOAD_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -328,91 +435,3 @@ UPLOAD_TEMPLATE = '''
 </body>
 </html>
 '''
-
-@app.route('/')
-def upload_page():
-    """Mobile-optimized upload page"""
-    return render_template_string(UPLOAD_TEMPLATE)
-
-@app.route('/health')
-def health_check():
-    """Health check endpoint for Cloud Run"""
-    return jsonify({'status': 'healthy'}), 200
-
-@app.route('/upload', methods=['POST'])
-def handle_upload():
-    """Handle file upload and trigger processing"""
-    try:
-        if 'audio_file' not in request.files:
-            return jsonify({'error': 'No file selected'}), 400
-        
-        file = request.files['audio_file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-        
-        if file and allowed_file(file.filename):
-            # Generate unique filename
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            unique_id = str(uuid.uuid4())[:8]
-            filename = f"{timestamp}_{unique_id}_{file.filename}"
-            
-            filepath = os.path.join(UPLOAD_FOLDER, filename)
-            file.save(filepath)
-            
-            logger.info(f"File uploaded: {filename}")
-            
-            # Process file in background thread
-            threading.Thread(target=process_audio_file, args=(filepath,), daemon=True).start()
-            
-            return jsonify({
-                'success': True, 
-                'message': 'File uploaded successfully! Processing started.',
-                'filename': filename
-            })
-        
-        return jsonify({'error': 'Invalid file type. Please upload M4A, MP3, WAV, or AAC files.'}), 400
-    
-    except Exception as e:
-        logger.error(f"Upload error: {str(e)}")
-        return jsonify({'error': 'Upload failed. Please try again.'}), 500
-
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'m4a', 'mp3', 'wav', 'aac'}
-
-def process_audio_file(filepath):
-    """Process and upload audio file to Cloud Storage"""
-    try:
-        logger.info(f"Starting processing: {filepath}")
-        
-        # Extract filename
-        filename = os.path.basename(filepath)
-        
-        # Upload to Cloud Storage
-        bucket = storage_client.bucket(BUCKET_NAME)
-        blob = bucket.blob(f"audio-uploads/{filename}")
-        
-        # Upload the file
-        with open(filepath, 'rb') as file_data:
-            blob.upload_from_file(file_data)
-        
-        logger.info(f"File uploaded to Cloud Storage: gs://{BUCKET_NAME}/audio-uploads/{filename}")
-        
-        # Your additional processing logic here
-        # Example: transcription, analysis, etc.
-        
-        # Clean up local temp file
-        if os.path.exists(filepath):
-            os.remove(filepath)
-            logger.info(f"Local temp file cleaned up: {filepath}")
-            
-    except Exception as e:
-        logger.error(f"Processing/Upload error: {str(e)}")
-        # Clean up on error
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-if __name__ == '__main__':
-    # Cloud Run provides PORT environment variable
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
