@@ -147,7 +147,7 @@ UPLOAD_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Upload</title>
+    <title>Large File Upload</title>
     <style>
         * {
             margin: 0;
@@ -164,7 +164,7 @@ UPLOAD_TEMPLATE = '''
             align-items: center;
             justify-content: center;
             padding: 20px;
-}
+        }
         
         .container {
             background: white;
@@ -299,16 +299,16 @@ UPLOAD_TEMPLATE = '''
 </head>
 <body>
     <div class="container">
-        <h1>TERRY APP TESTING</h1>
+        <h1>Audio File Upload (up to 1000MB)</h1>
         
-        <form id="uploadForm" enctype="multipart/form-data">
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
             <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                <div class="upload-icon">📱</div>
-                <div class="upload-text">Tap to select audio file</div>
-                <div style="font-size: 14px; color: #999;">Supports: M4A/MP3</div>
+                <div class="upload-icon">🎵</div>
+                <div class="upload-text">Tap to select large audio file</div>
+                <div style="font-size: 14px; color: #999;">Supports: M4A/MP3/WAV/AAC (up to 1000MB)</div>
             </div>
             
-            <input type="file" id="fileInput" name="audio_file" accept=".m4a,.mp3,.wav,.aac,audio/*">
+            <input type="file" id="fileInput" name="audio_file" accept=".m4a,.mp3,.wav,.aac" required>
             
             <div class="file-info" id="fileInfo">
                 <strong>Selected:</strong> <span id="fileName"></span><br>
@@ -320,7 +320,7 @@ UPLOAD_TEMPLATE = '''
             </div>
             
             <button type="submit" class="upload-btn" id="uploadBtn" disabled>
-                Upload & Process
+                Upload Large File
             </button>
         </form>
         
@@ -347,6 +347,16 @@ UPLOAD_TEMPLATE = '''
                 fileSize.textContent = `Size: ${(file.size / 1024 / 1024).toFixed(2)} MB`;
                 fileInfo.style.display = 'block';
                 uploadBtn.disabled = false;
+                
+                // Check file size (1000MB = 1000 * 1024 * 1024 bytes)
+                if (file.size > 1000 * 1024 * 1024) {
+                    statusMessage.style.display = 'block';
+                    statusMessage.className = 'status-message error';
+                    statusMessage.textContent = 'File too large! Maximum size is 1000MB.';
+                    uploadBtn.disabled = true;
+                } else {
+                    statusMessage.style.display = 'none';
+                }
             }
         });
 
@@ -379,21 +389,21 @@ UPLOAD_TEMPLATE = '''
             formData.append('audio_file', fileInput.files[0]);
             
             uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Uploading...';
+            uploadBtn.textContent = 'Uploading large file... Please wait...';
             progressBar.style.display = 'block';
             statusMessage.style.display = 'none';
             
-            // Simulate progress
+            // Simulate progress for large files
             let progress = 0;
             const progressInterval = setInterval(() => {
-                progress += Math.random() * 30;
-                if (progress > 90) progress = 90;
+                progress += Math.random() * 15; // Slower progress for large files
+                if (progress > 85) progress = 85; // Stop at 85% until real response
                 progressFill.style.width = progress + '%';
                 
-                if (progress >= 90) {
+                if (progress >= 85) {
                     clearInterval(progressInterval);
                 }
-            }, 200);
+            }, 500);
             
             fetch('/upload', {
                 method: 'POST',
@@ -410,21 +420,21 @@ UPLOAD_TEMPLATE = '''
                     
                     if (data.success) {
                         statusMessage.className = 'status-message success';
-                        statusMessage.textContent = data.message;
+                        statusMessage.textContent = data.message || 'Large file uploaded successfully!';
                         
                         // Reset form after success
                         setTimeout(() => {
                             uploadForm.reset();
                             fileInfo.style.display = 'none';
                             uploadBtn.disabled = true;
-                            uploadBtn.textContent = 'Upload & Process';
+                            uploadBtn.textContent = 'Upload Large File';
                             statusMessage.style.display = 'none';
-                        }, 3000);
+                        }, 4000);
                     } else {
                         statusMessage.className = 'status-message error';
                         statusMessage.textContent = data.error || 'Upload failed';
                         uploadBtn.disabled = false;
-                        uploadBtn.textContent = 'Upload & Process';
+                        uploadBtn.textContent = 'Upload Large File';
                     }
                 }, 500);
             })
@@ -435,7 +445,7 @@ UPLOAD_TEMPLATE = '''
                 statusMessage.className = 'status-message error';
                 statusMessage.textContent = 'Upload failed. Please try again.';
                 uploadBtn.disabled = false;
-                uploadBtn.textContent = 'Upload & Process';
+                uploadBtn.textContent = 'Upload Large File';
                 progressBar.style.display = 'none';
             });
         });
