@@ -136,7 +136,7 @@ UPLOAD_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Large File Upload - Direct to Cloud Storage</title>
+    <title> TESTING ZONE </title>
     <style>
         * {
             margin: 0;
@@ -293,8 +293,8 @@ UPLOAD_TEMPLATE = '''
 </head>
 <body>
     <div class="container">
-        <h1>🎵 Large Audio Upload</h1>
-        <p style="color: #666; margin-bottom: 20px;">Direct to Cloud Storage - No size limit!</p>
+        <h1> TEV_ALPINE </h1>
+        <p style="color: #666; margin-bottom: 20px;"> Version python flask proto </p>
         
         <div class="upload-area" onclick="document.getElementById('fileInput').click()">
             <div class="upload-icon">☁️</div>
@@ -314,7 +314,7 @@ UPLOAD_TEMPLATE = '''
         </div>
         
         <button type="button" class="upload-btn" id="uploadBtn" onclick="uploadFile()" disabled>
-            Upload to Cloud Storage
+            Upload
         </button>
         
         <div class="status-message" id="statusMessage"></div>
