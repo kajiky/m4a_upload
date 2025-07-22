@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import uuid
 import logging
 
+#Comment to try GCP trigger 
+
 app = Flask(__name__)
 
 # Configuration - removed MAX_CONTENT_LENGTH since we'll use direct uploads
