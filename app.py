@@ -1,10 +1,14 @@
 # Fixed Audio Upload Flask App - Bypass 32MB Cloud Run limit with signed URLs
 from flask import Flask, request, render_template_string, jsonify
 from google.cloud import storage
+from google.auth import impersonated_credentials
+import google.auth
 import os
 from datetime import datetime, timedelta
 import uuid
 import logging
+
+
 
 #Comment to try GCP trigger 
 
@@ -14,7 +18,14 @@ app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 BUCKET_NAME = "terry_app_bucket"
-storage_client = storage.Client()
+
+source_credentials, project_id = google.auth.default()
+target_credentials = impersonated_credentials.Credentials(
+    source_credentials=source_credentials,
+    target_principal="audio-upload-sa@eastern-stock-462512-j4.iam.gserviceaccount.com",
+    target_scopes=["https://www.googleapis.com/auth/cloud-platform"]
+)
+storage_client = storage.Client(credentials=target_credentials)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
